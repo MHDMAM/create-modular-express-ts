@@ -8,7 +8,7 @@ import { formatJson } from './json.ts';
 export const TEMPLATE_NAME = 'modular-express-ts';
 export const TEMPLATE_URL = 'https://github.com/MHDMAM/modular-express-ts';
 /** Template version this CLI release is tested against. */
-export const TEMPLATE_SOURCE = 'github:MHDMAM/modular-express-ts#v1.1.0';
+export const TEMPLATE_SOURCE = 'github:MHDMAM/modular-express-ts#v0.2.0';
 
 const PACKAGE_NAME = /^(?:@[a-z0-9-*~][a-z0-9-*._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
 
