@@ -11,13 +11,15 @@ You'll be asked for:
 
 - **Project name** (used for the folder, `package.json` and config defaults)
 - **Optional features**:
-  - `http`: outbound HTTP stack (`HttpClient` with retries, `CircuitBreaker`, `ServiceRequester`)
+  - `http`: `ServiceRequester`/`HttpClient` with retries, `Retry-After` and a circuit breaker (axios, cockatiel)
   - `mssql`: MSSQL connection pool
-  - `kafka`: Kafka producer/consumer
-  - `hazelcast`: Hazelcast distributed map cache
+  - `kafka`: Kafka producer, topic handlers and dead-letter topic (Confluent's official client)
+  - `hazelcast`: Hazelcast distributed maps and cache
+  - `redis`: Redis/Valkey cache
 - **Install dependencies** and **initialize git**
 
-Unselected features are removed completely: their files, config sections, dependencies and README sections.
+Unselected features are removed completely: their files and tests, config sections, dependencies, connector registration
+and README sections.
 
 ## Non-interactive use
 
@@ -25,13 +27,13 @@ Unselected features are removed completely: their files, config sections, depend
 npm create modular-express-ts@latest my-app -- --features http,kafka --no-git
 ```
 
-| Option              | Description                                                      |
-| ------------------- | ---------------------------------------------------------------- |
-| `--features <list>` | Comma-separated `http`, `mssql`, `kafka`, `hazelcast`, or `none` |
-| `--no-install`      | Skip installing dependencies                                     |
-| `--no-git`          | Skip `git init`                                                  |
-| `--template <src>`  | Template source: giget syntax or a local git repository          |
-| `-y`, `--yes`       | Accept defaults for everything not given (features: `http`)      |
+| Option              | Description                                                               |
+| ------------------- | ------------------------------------------------------------------------- |
+| `--features <list>` | Comma-separated `http`, `mssql`, `kafka`, `hazelcast`, `redis`, or `none` |
+| `--no-install`      | Skip installing dependencies                                              |
+| `--no-git`          | Skip `git init`                                                           |
+| `--template <src>`  | Template source: giget syntax or a local git repository                   |
+| `-y`, `--yes`       | Accept defaults for everything not given (features: `http`)               |
 
 ## Development
 

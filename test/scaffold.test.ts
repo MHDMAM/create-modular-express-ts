@@ -48,7 +48,7 @@ describe('scaffold', () => {
       personalize(dir, '@acme/my-app');
 
       const files = listFiles(dir);
-      const sources = files.filter((f) => f.startsWith('src/') && f.endsWith('.ts'));
+      const sources = files.filter((f) => /^(src|test)\//.test(f) && f.endsWith('.ts'));
       const pkg = JSON.parse(readText(dir, 'package.json'));
       const readme = readText(dir, 'README.md');
 
@@ -57,7 +57,7 @@ describe('scaffold', () => {
         for (const file of feature.files) assert.equal(existsSync(join(dir, file)), kept, file);
         for (const dep of feature.dependencies) assert.equal(dep in pkg.dependencies, kept, dep);
         if (kept) continue;
-        for (const file of feature.files) {
+        for (const file of feature.files.filter((f) => f.startsWith('src/global/'))) {
           const alias = importAlias(file);
           for (const src of sources) assert.ok(!readText(dir, src).includes(`'${alias}'`), `${src} imports ${alias}`);
         }
@@ -66,6 +66,13 @@ describe('scaffold', () => {
           for (const key of feature.configKeys) assert.ok(!(key in json), `${config} still has "${key}"`);
         }
       }
+
+      // Registration order in the template's src/connectors.ts
+      const registered = (['hazelcast', 'kafka', 'redis'] as FeatureId[]).filter((id) => keep.includes(id));
+      assert.ok(
+        readText(dir, 'src/connectors.ts').includes(`= [${registered.join(', ')}];`),
+        'connectors registry lists exactly the kept connectors',
+      );
 
       const hasConnector = FEATURES.some((f) => f.connector && keep.includes(f.id));
       assert.equal(readme.includes('## Optional Connectors'), hasConnector);

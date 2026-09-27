@@ -16,7 +16,7 @@ function run(command: string, args: string[], cwd: string) {
 }
 
 // Every feature alone, none and all: each generated project must install, typecheck, pass its tests and be formatted
-const combinations = ['none', 'http', 'mssql', 'kafka', 'hazelcast', 'http,mssql,kafka,hazelcast'];
+const combinations = ['none', 'http', 'mssql', 'kafka', 'hazelcast', 'redis', 'http,mssql,kafka,hazelcast,redis'];
 
 describe('create-modular-express-ts', { concurrency: 1 }, () => {
   for (const features of combinations) {

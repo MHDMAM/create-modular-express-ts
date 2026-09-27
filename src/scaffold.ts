@@ -1,14 +1,14 @@
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { FEATURES, readmeSection, type FeatureId } from './features.ts';
+import { FEATURES, readmeSection, type FeatureId, type TextEdit } from './features.ts';
 import { formatJson } from './json.ts';
 
 /** Name the template ships with; replaced by the new project's name. */
 export const TEMPLATE_NAME = 'modular-express-ts';
 export const TEMPLATE_URL = 'https://github.com/MHDMAM/modular-express-ts';
 /** Template version this CLI release is tested against. */
-export const TEMPLATE_SOURCE = 'github:MHDMAM/modular-express-ts#v1.0.0';
+export const TEMPLATE_SOURCE = 'github:MHDMAM/modular-express-ts#v1.1.0';
 
 const PACKAGE_NAME = /^(?:@[a-z0-9-*~][a-z0-9-*._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
 
@@ -23,12 +23,12 @@ const read = (dir: string, file: string) => readFileSync(join(dir, file), 'utf8'
 const write = (dir: string, file: string) => (content: string) => writeFileSync(join(dir, file), content);
 const readJson = (dir: string, file: string) => JSON.parse(read(dir, file));
 
-function applyEdit(dir: string, file: string, pattern: RegExp, replacement: string) {
+function applyEdit(dir: string, file: string, pattern: RegExp, replacement: TextEdit['replacement']) {
   const content = read(dir, file);
   if (!pattern.test(content)) {
     throw new Error(`Template changed: ${pattern} not found in ${file}. Please report this issue.`);
   }
-  write(dir, file)(content.replace(pattern, replacement));
+  write(dir, file)(content.replace(pattern, replacement as (substring: string, ...args: any[]) => string));
 }
 
 function configFiles(dir: string): string[] {
