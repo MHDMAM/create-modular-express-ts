@@ -37,6 +37,9 @@ npm create modular-express-ts@latest my-app -- --features http,kafka --no-git
 
 ## Development
 
+Requires Node.js 24 (`.nvmrc`). CI runs the unit tests on every push and pull request, and the end-to-end tests after
+them; Renovate opens monthly dependency update PRs.
+
 ```sh
 npm test            # scaffolds every feature combination (downloads the pinned template)
 npm run test:e2e    # builds the CLI, generates projects, installs, typechecks and tests them
