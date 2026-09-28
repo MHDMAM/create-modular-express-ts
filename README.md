@@ -18,8 +18,9 @@ You'll be asked for:
   - `redis`: Redis/Valkey cache
 - **Install dependencies** and **initialize git**
 
-Unselected features are removed completely: their files and tests, config sections, dependencies, connector registration
-and README sections.
+Unselected features are removed completely: their code and tests, dependencies, environment variables, connector
+registration and documentation. The template itself describes its features (`scaffold/features.json`) and ships the
+script that removes them; the CLI downloads the template, asks which features to keep and runs that script.
 
 ## Non-interactive use
 
@@ -41,13 +42,14 @@ Requires Node.js 24 (`.nvmrc`). CI runs the unit tests on every push and pull re
 them; Renovate opens monthly dependency update PRs.
 
 ```sh
-npm test            # scaffolds every feature combination (downloads the pinned template)
+npm test            # reads the template's feature list and runs its scaffold script (downloads the pinned template)
 npm run test:e2e    # builds the CLI, generates projects, installs, typechecks and tests them
 ```
 
 Set `TEMPLATE_DIR=<path to a local modular-express-ts checkout>` to test against local template changes. Each CLI
-release pins a template tag (`TEMPLATE_SOURCE` in `src/scaffold.ts`); the tests fail if the template no longer matches
-the feature list in `src/features.ts`.
+release pins a template tag (`TEMPLATE_SOURCE` in `src/scaffold.ts`). Every feature combination is tested in the
+template repository, so a template release needs a CLI change only when the manifest format (`MANIFEST_VERSION`) or the
+script's arguments change.
 
 ## License
 

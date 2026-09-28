@@ -1,36 +1,21 @@
 import assert from 'node:assert/strict';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
-import { FEATURES, FEATURE_IDS, type FeatureId } from '../src/features.ts';
-import { formatJson } from '../src/json.ts';
-import { personalize, removeFeatures, TEMPLATE_NAME, validatePackageName } from '../src/scaffold.ts';
+import { MANIFEST_VERSION, readFeatures, scaffoldTemplate, validatePackageName } from '../src/scaffold.ts';
 import { freshTemplate, listFiles, readText } from './helpers.ts';
 
-/** `src/global/libs/Kafka.ts` -> `@libs/Kafka`, the alias other files import it by. */
-function importAlias(file: string): string {
-  const aliases: Record<string, string> = { libs: '@libs', utils: '@utils', types: '@lTypes' };
-  const [, folder, name] = file.match(/^src\/global\/(\w+)\/(\w+)\.ts$/)!;
-  return `${aliases[folder]}/${name}`;
-}
-
-const subsets: FeatureId[][] = Array.from({ length: 2 ** FEATURE_IDS.length }, (_, mask) =>
-  FEATURE_IDS.filter((_, i) => mask & (1 << i)),
-);
+// Every feature combination is tested in the template itself (test/scaffold.test.ts there); these tests cover what
+// the CLI does: read the template's feature list and run its scaffold script.
 
 const dirs: string[] = [];
 after(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
-describe('formatJson', () => {
-  it('reproduces every template config file byte for byte', async () => {
-    const dir = await freshTemplate();
-    dirs.push(dir);
-    for (const file of listFiles(dir).filter((f) => /^src\/config\/.*\.json$/.test(f))) {
-      const text = readText(dir, file);
-      assert.equal(formatJson(JSON.parse(text)), text, file);
-    }
-  });
-});
+async function template(): Promise<string> {
+  const dir = await freshTemplate();
+  dirs.push(dir);
+  return dir;
+}
 
 describe('validatePackageName', () => {
   it('accepts npm package names and rejects invalid ones', () => {
@@ -39,59 +24,42 @@ describe('validatePackageName', () => {
   });
 });
 
-describe('scaffold', () => {
-  for (const keep of subsets) {
-    it(`keeps [${keep.join(', ') || 'none'}]`, async () => {
-      const dir = await freshTemplate();
-      dirs.push(dir);
-      removeFeatures(dir, keep);
-      personalize(dir, '@acme/my-app');
+describe('readFeatures', () => {
+  it("reads the template's optional features", async () => {
+    const features = readFeatures(await template());
+    assert.deepEqual(
+      features.map((f) => f.id),
+      ['http', 'mssql', 'kafka', 'hazelcast', 'redis'],
+    );
+    for (const feature of features) assert.ok(feature.label && feature.hint, feature.id);
+    assert.deepEqual(
+      features.filter((f) => f.default).map((f) => f.id),
+      ['http'],
+    );
+  });
 
-      const files = listFiles(dir);
-      const sources = files.filter((f) => /^(src|test)\//.test(f) && f.endsWith('.ts'));
-      const pkg = JSON.parse(readText(dir, 'package.json'));
-      const readme = readText(dir, 'README.md');
+  it('rejects a manifest version it does not support', async () => {
+    const dir = await template();
+    const manifest = JSON.parse(readText(dir, 'scaffold/features.json'));
+    writeFileSync(join(dir, 'scaffold/features.json'), JSON.stringify({ ...manifest, version: MANIFEST_VERSION + 1 }));
+    assert.throws(() => readFeatures(dir), /manifest is version 2, this CLI supports 1/);
+  });
+});
 
-      for (const feature of FEATURES) {
-        const kept = keep.includes(feature.id);
-        for (const file of feature.files) assert.equal(existsSync(join(dir, file)), kept, file);
-        for (const dep of feature.dependencies) assert.equal(dep in pkg.dependencies, kept, dep);
-        if (kept) continue;
-        for (const file of feature.files.filter((f) => f.startsWith('src/global/'))) {
-          const alias = importAlias(file);
-          for (const src of sources) assert.ok(!readText(dir, src).includes(`'${alias}'`), `${src} imports ${alias}`);
-        }
-        for (const config of files.filter((f) => f.startsWith('src/config/'))) {
-          const json = JSON.parse(readText(dir, config));
-          for (const key of feature.configKeys) assert.ok(!(key in json), `${config} still has "${key}"`);
-        }
-      }
+describe('scaffoldTemplate', () => {
+  it("runs the template's scaffold script", async () => {
+    const dir = await template();
+    scaffoldTemplate(dir, '@acme/my-app', ['redis']);
 
-      // Registration order in the template's src/connectors.ts
-      const registered = (['hazelcast', 'kafka', 'redis'] as FeatureId[]).filter((id) => keep.includes(id));
-      assert.ok(
-        readText(dir, 'src/connectors.ts').includes(`= [${registered.join(', ')}];`),
-        'connectors registry lists exactly the kept connectors',
-      );
+    assert.equal(JSON.parse(readText(dir, 'package.json')).name, '@acme/my-app');
+    assert.ok(readText(dir, 'README.md').startsWith('# @acme/my-app\n'));
+    assert.ok(existsSync(join(dir, 'src/connectors/redis')));
+    assert.ok(!existsSync(join(dir, 'src/connectors/kafka')));
+    assert.ok(!listFiles(dir).some((file) => file.startsWith('scaffold/')), 'the scaffold folder is removed');
+  });
 
-      const hasConnector = FEATURES.some((f) => f.connector && keep.includes(f.id));
-      assert.equal(readme.includes('## Optional Connectors'), hasConnector);
-      assert.equal(readme.includes('## Outbound HTTP'), keep.includes('http'));
-      assert.ok(readme.startsWith('# @acme/my-app\n'));
-      assert.ok(!readme.includes('## License'));
-      assert.ok(!readme.includes('\n\n\n'), 'README has no stray blank lines');
-      assert.ok(!existsSync(join(dir, 'LICENSE')));
-
-      assert.equal(pkg.name, '@acme/my-app');
-      assert.equal(pkg.private, true);
-      assert.equal(pkg.author, undefined);
-      assert.equal(JSON.parse(readText(dir, 'package-lock.json')).name, '@acme/my-app');
-
-      // The template name only survives in the README credit line
-      for (const file of files.filter((f) => f !== 'README.md' && f !== 'package-lock.json')) {
-        assert.ok(!readText(dir, file).includes(TEMPLATE_NAME), `${file} still mentions ${TEMPLATE_NAME}`);
-      }
-      assert.match(readText(dir, 'src/config/default.json'), /"APP_NAME": "my-app"/);
-    });
-  }
+  it("reports the script's errors", async () => {
+    const dir = await template();
+    assert.throws(() => scaffoldTemplate(dir, 'app', ['mongo']), /Scaffolding failed:\n.*Unknown feature\(s\): mongo/);
+  });
 });

@@ -5,15 +5,19 @@ import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { basename, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { downloadTemplate } from 'giget';
-import { FEATURES, FEATURE_IDS, isFeatureId, type FeatureId } from './features.ts';
-import { copyLocalTemplate, personalize, removeFeatures, TEMPLATE_SOURCE, validatePackageName } from './scaffold.ts';
-
-const DEFAULT_FEATURES: FeatureId[] = ['http'];
+import {
+  copyLocalTemplate,
+  readFeatures,
+  scaffoldTemplate,
+  TEMPLATE_SOURCE,
+  validatePackageName,
+  type Feature,
+} from './scaffold.ts';
 
 const HELP = `Usage: npm create modular-express-ts [directory] -- [options]
 
 Options:
-  --features <list>   Comma-separated: ${FEATURE_IDS.join(', ')} (or "none")
+  --features <list>   Comma-separated feature ids (http, mssql, kafka, hazelcast, redis), or "none"
   --no-install        Skip installing dependencies
   --no-git            Skip "git init"
   --template <src>    Template source (giget syntax or a local directory)
@@ -22,8 +26,9 @@ Options:
   -v, --version       Show the CLI version
 `;
 
-function exitIfCancelled<T>(value: T): Exclude<T, symbol> {
+function exitIfCancelled<T>(value: T, cleanup?: () => void): Exclude<T, symbol> {
   if (p.isCancel(value)) {
+    cleanup?.();
     p.cancel('Cancelled.');
     process.exit(1);
   }
@@ -41,15 +46,17 @@ function run(command: string, args: string[], cwd: string) {
   }
 }
 
-function parseFeatures(value: string): FeatureId[] {
+/** Parses `--features`, checking the ids against the template's features. */
+function parseFeatures(value: string, available: Feature[]): string[] {
   if (value.trim() === 'none') return [];
   const ids = value
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  const unknown = ids.filter((id) => !isFeatureId(id));
-  if (unknown.length) throw new Error(`Unknown feature(s): ${unknown.join(', ')}. Valid: ${FEATURE_IDS.join(', ')}`);
-  return ids as FeatureId[];
+  const valid = available.map((f) => f.id);
+  const unknown = ids.filter((id) => !valid.includes(id));
+  if (unknown.length) throw new Error(`Unknown feature(s): ${unknown.join(', ')}. Valid: ${valid.join(', ')}`);
+  return ids;
 }
 
 async function main() {
@@ -96,37 +103,42 @@ async function main() {
   if (nameError) throw new Error(`Invalid project name "${name}": ${nameError}`);
   if (existsSync(dir) && readdirSync(dir).length > 0) throw new Error(`Directory "${target}" is not empty.`);
 
-  // Features
-  const features =
-    values.features !== undefined
-      ? parseFeatures(values.features)
-      : yes
-        ? DEFAULT_FEATURES
-        : exitIfCancelled(
-            await p.multiselect<FeatureId>({
-              message: 'Optional features (space to toggle)',
-              options: FEATURES.map((f) => ({ value: f.id, label: f.label, hint: f.hint })),
-              initialValues: DEFAULT_FEATURES,
-              required: false,
-            }),
-          );
-
-  const install =
-    values.install ?? (yes ? true : exitIfCancelled(await p.confirm({ message: 'Install dependencies?' })));
-  const git =
-    values.git ?? (yes ? true : exitIfCancelled(await p.confirm({ message: 'Initialize a git repository?' })));
-
   const createdDir = !existsSync(dir);
+  const cleanup = () => createdDir && rmSync(dir, { recursive: true, force: true });
   const s = p.spinner();
+  let install = true;
   try {
+    // The template describes its own optional features, so it is downloaded before asking for them
     s.start('Downloading template');
     const source = values.template ?? TEMPLATE_SOURCE;
     if (existsSync(source)) copyLocalTemplate(resolve(source), dir);
     else await downloadTemplate(source, { dir, force: true, silent: true });
     s.stop('Template downloaded');
 
-    removeFeatures(dir, features);
-    personalize(dir, name);
+    const available = readFeatures(dir);
+    const defaults = available.filter((f) => f.default).map((f) => f.id);
+    const features =
+      values.features !== undefined
+        ? parseFeatures(values.features, available)
+        : yes
+          ? defaults
+          : exitIfCancelled(
+              await p.multiselect<string>({
+                message: 'Optional features (space to toggle)',
+                options: available.map((f) => ({ value: f.id, label: f.label, hint: f.hint })),
+                initialValues: defaults,
+                required: false,
+              }),
+              cleanup,
+            );
+
+    install =
+      values.install ?? (yes ? true : exitIfCancelled(await p.confirm({ message: 'Install dependencies?' }), cleanup));
+    const git =
+      values.git ??
+      (yes ? true : exitIfCancelled(await p.confirm({ message: 'Initialize a git repository?' }), cleanup));
+
+    scaffoldTemplate(dir, name, features);
     p.log.success(`Features: ${features.length ? features.join(', ') : 'none'}`);
 
     // Keeps package-lock.json in sync with the removed dependencies
@@ -140,15 +152,13 @@ async function main() {
     }
   } catch (error) {
     s.error('Failed');
-    if (createdDir) rmSync(dir, { recursive: true, force: true });
+    cleanup();
     throw error;
   }
 
   const cd = relative(process.cwd(), dir);
-  const steps = [cd && `cd ${cd.includes(' ') ? `"${cd}"` : cd}`, !install && 'npm install', 'npm run dev'].filter(
-    Boolean,
-  );
-  p.note(steps.join('\n'), 'Next steps');
+  const steps = [cd && `cd ${cd.includes(' ') ? `"${cd}"` : cd}`, !install && 'npm install', 'npm run dev'];
+  p.note(steps.filter(Boolean).join('\n'), 'Next steps');
   p.outro('Done.');
 }
 
