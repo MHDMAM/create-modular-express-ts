@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 /** Template version this CLI release is tested against. */
-export const TEMPLATE_SOURCE = 'github:MHDMAM/modular-express-ts#v0.3.0';
+export const TEMPLATE_SOURCE = 'github:MHDMAM/modular-express-ts#v0.4.0';
 
 /**
  * Manifest version this CLI understands. The template describes its removable features in
