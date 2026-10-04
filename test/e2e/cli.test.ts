@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
-import { TEMPLATE } from '../helpers.ts';
+import { readFeatures } from '../../src/scaffold.ts';
+import { freshTemplate, TEMPLATE } from '../helpers.ts';
 
 const CLI = join(import.meta.dirname, '../../dist/index.js');
 const root = mkdtempSync(join(tmpdir(), 'mets-e2e-'));
@@ -15,8 +16,10 @@ function run(command: string, args: string[], cwd: string) {
   assert.equal(result.status, 0, `${command} ${args.join(' ')}\n${result.stdout}\n${result.stderr}`);
 }
 
-// Every feature alone, none and all: each generated project must install, typecheck, pass its tests and be formatted
-const combinations = ['none', 'http', 'mssql', 'kafka', 'hazelcast', 'redis', 'http,mssql,kafka,hazelcast,redis'];
+// Every feature of the template alone, none and all: each generated project must install, typecheck, pass its tests
+// and be formatted
+const ids = readFeatures(await freshTemplate()).map((feature) => feature.id);
+const combinations = ['none', ...ids, ids.join(',')];
 
 describe('create-modular-express-ts', { concurrency: 1 }, () => {
   for (const features of combinations) {

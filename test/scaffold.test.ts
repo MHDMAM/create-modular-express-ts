@@ -27,10 +27,10 @@ describe('validatePackageName', () => {
 describe('readFeatures', () => {
   it("reads the template's optional features", async () => {
     const features = readFeatures(await template());
-    assert.deepEqual(
-      features.map((f) => f.id),
-      ['http', 'mssql', 'kafka', 'hazelcast', 'redis'],
-    );
+    // The list belongs to the template and grows with it, so only what every version has is named here
+    const ids = features.map((f) => f.id);
+    for (const id of ['http', 'mssql', 'kafka', 'hazelcast', 'redis']) assert.ok(ids.includes(id), id);
+    assert.equal(new Set(ids).size, ids.length, 'feature ids are unique');
     for (const feature of features) assert.ok(feature.label && feature.hint, feature.id);
     assert.deepEqual(
       features.filter((f) => f.default).map((f) => f.id),
